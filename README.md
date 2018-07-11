@@ -1,6 +1,10 @@
 # taobaogo
 淘宝Api、淘宝开放平台Api请求基础SDK
 
+# 淘宝API sign算法
+
+[sign算法](http://open.taobao.com/doc.htm?docId=101617&docType=1)
+
 # Example 🌰
 ```go
 package main

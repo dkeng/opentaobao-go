@@ -1,10 +1,12 @@
 package opentaobao
 
 import (
+	"bytes"
 	"crypto/md5"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -25,28 +27,60 @@ var (
 	Router string
 	// Timeout ...
 	Timeout time.Duration
+	// CacheExpiration 缓存过期时间
+	CacheExpiration = time.Hour
+	// GetCache 获取缓存
+	GetCache GetCacheFunc
+	// SetCache 设置缓存
+	SetCache SetCacheFunc
 )
 
 // Parameter 参数
 type Parameter map[string]string
 
+// copyParameter 复制参数
+func copyParameter(srcParams Parameter) Parameter {
+	newParams := make(Parameter)
+	for key, value := range srcParams {
+		newParams[key] = value
+	}
+	return newParams
+}
+
+// newCacheKey 创建缓存Key
+func newCacheKey(params Parameter) string {
+	cpParams := copyParameter(params)
+	delete(cpParams, "session")
+	delete(cpParams, "timestamp")
+	delete(cpParams, "sign")
+
+	cacheKeyBuf := new(bytes.Buffer)
+	for k, v := range cpParams {
+		cacheKeyBuf.WriteString(k + "=" + v)
+	}
+
+	h := md5.New()
+	io.Copy(h, cacheKeyBuf)
+	return hex.EncodeToString(h.Sum(nil))
+}
+
 //Execute 执行API接口
-func Execute(method string, param Parameter) (res *simplejson.Json, err error) {
+func execute(method string, param Parameter) (bytes []byte, err error) {
 	err = checkConfig()
 	if err != nil {
 		return
 	}
 	param["method"] = method
-
-	req, err := http.NewRequest("POST", Router, strings.NewReader(param.getRequestData()))
+	var req *http.Request
+	req, err = http.NewRequest("POST", Router, strings.NewReader(param.getRequestData()))
 	if err != nil {
 		return
 	}
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded;charset=utf-8")
 	httpClient := &http.Client{}
 	httpClient.Timeout = Timeout
-
-	response, err := httpClient.Do(req)
+	var response *http.Response
+	response, err = httpClient.Do(req)
 	if err != nil {
 		return
 	}
@@ -55,19 +89,61 @@ func Execute(method string, param Parameter) (res *simplejson.Json, err error) {
 		err = fmt.Errorf("请求错误:%d", response.StatusCode)
 		return
 	}
+	defer response.Body.Close()
+	bytes, err = ioutil.ReadAll(response.Body)
+	return
+}
 
-	body, err := ioutil.ReadAll(response.Body)
+//Execute 执行API接口
+func Execute(method string, param Parameter) (res *simplejson.Json, err error) {
+	var bodyBytes []byte
+	bodyBytes, err = execute(method, param)
 	if err != nil {
 		return
 	}
-	res, err = simplejson.NewJson(body)
+	// return bytesToResult(bodyBytes)
+	res, err = simplejson.NewJson(bodyBytes)
 	if err != nil {
 		return
 	}
+
 	if responseError, ok := res.CheckGet("error_response"); ok {
 		errorBytes, _ := responseError.Encode()
 		err = errors.New("执行错误:" + string(errorBytes))
+		res = nil
 	}
+	return
+}
+
+// func bytesToResult(bytes []byte) (res *simplejson.Json, err error) {
+// 	res, err = simplejson.NewJson(bytes)
+// 	if err != nil {
+// 		return
+// 	}
+
+// 	if responseError, ok := res.CheckGet("error_response"); ok {
+// 		errorBytes, _ := responseError.Encode()
+// 		err = errors.New("执行错误:" + string(errorBytes))
+// 	}
+// 	return
+// }
+
+// ExecuteCache 执行API接口，缓存
+func ExecuteCache(method string, param Parameter) (res *simplejson.Json, err error) {
+	cacheKey := newCacheKey(param)
+	cacheBytes := GetCache(cacheKey)
+	if len(cacheBytes) > 0 {
+		res, err = simplejson.NewJson(cacheBytes)
+		if err == nil && res != nil {
+			return
+		}
+	}
+	res, err = Execute(method, param)
+	if err != nil {
+		return
+	}
+	ejsonBody, _ := res.MarshalJSON()
+	go SetCache(cacheKey, ejsonBody, CacheExpiration)
 	return
 }
 

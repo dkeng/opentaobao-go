@@ -23,6 +23,8 @@ var (
 	AppSecret string
 	// Router 环境请求地址
 	Router string
+	// Timeout ...
+	Timeout time.Duration
 )
 
 // Parameter 参数
@@ -42,7 +44,7 @@ func Execute(method string, param Parameter) (res *simplejson.Json, err error) {
 	}
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded;charset=utf-8")
 	httpClient := &http.Client{}
-	httpClient.Timeout = time.Second * 3
+	httpClient.Timeout = Timeout
 
 	response, err := httpClient.Do(req)
 	if err != nil {

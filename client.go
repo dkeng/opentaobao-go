@@ -64,13 +64,13 @@ func newCacheKey(params Parameter) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-//Execute 执行API接口
-func execute(method string, param Parameter) (bytes []byte, err error) {
+// execute 执行API接口
+func execute(param Parameter) (bytes []byte, err error) {
 	err = checkConfig()
 	if err != nil {
 		return
 	}
-	param["method"] = method
+
 	var req *http.Request
 	req, err = http.NewRequest("POST", Router, strings.NewReader(param.getRequestData()))
 	if err != nil {
@@ -94,15 +94,22 @@ func execute(method string, param Parameter) (bytes []byte, err error) {
 	return
 }
 
-//Execute 执行API接口
+// Execute 执行API接口
 func Execute(method string, param Parameter) (res *simplejson.Json, err error) {
+	param["method"] = method
+	param.setRequestData()
+
 	var bodyBytes []byte
-	bodyBytes, err = execute(method, param)
+	bodyBytes, err = execute(param)
 	if err != nil {
 		return
 	}
-	// return bytesToResult(bodyBytes)
-	res, err = simplejson.NewJson(bodyBytes)
+
+	return bytesToResult(bodyBytes)
+}
+
+func bytesToResult(bytes []byte) (res *simplejson.Json, err error) {
+	res, err = simplejson.NewJson(bytes)
 	if err != nil {
 		return
 	}
@@ -115,21 +122,11 @@ func Execute(method string, param Parameter) (res *simplejson.Json, err error) {
 	return
 }
 
-// func bytesToResult(bytes []byte) (res *simplejson.Json, err error) {
-// 	res, err = simplejson.NewJson(bytes)
-// 	if err != nil {
-// 		return
-// 	}
-
-// 	if responseError, ok := res.CheckGet("error_response"); ok {
-// 		errorBytes, _ := responseError.Encode()
-// 		err = errors.New("执行错误:" + string(errorBytes))
-// 	}
-// 	return
-// }
-
 // ExecuteCache 执行API接口，缓存
 func ExecuteCache(method string, param Parameter) (res *simplejson.Json, err error) {
+	param["method"] = method
+	param.setRequestData()
+
 	cacheKey := newCacheKey(param)
 	cacheBytes := GetCache(cacheKey)
 	if len(cacheBytes) > 0 {
@@ -138,7 +135,13 @@ func ExecuteCache(method string, param Parameter) (res *simplejson.Json, err err
 			return
 		}
 	}
-	res, err = Execute(method, param)
+
+	var bodyBytes []byte
+	bodyBytes, err = execute(param)
+	if err != nil {
+		return
+	}
+	res, err = bytesToResult(bodyBytes)
 	if err != nil {
 		return
 	}
@@ -158,35 +161,44 @@ func checkConfig() error {
 	if Router == "" {
 		return errors.New("Router 不能为空")
 	}
+	if GetCache == nil {
+		return errors.New("GetCache 不能为空")
+	}
+	if SetCache == nil {
+		return errors.New("SetCache 不能为空")
+	}
 	return nil
 }
 
-// 获取请求数据
-func (p *Parameter) getRequestData() string {
-	// 公共参数
-	args := url.Values{}
+func (p Parameter) setRequestData() {
 	hh, _ := time.ParseDuration("8h")
 	loc := time.Now().UTC().Add(hh)
-	args.Add("timestamp", strconv.FormatInt(loc.Unix(), 10))
-	args.Add("format", "json")
-	args.Add("app_key", AppKey)
-	args.Add("v", "2.0")
-	args.Add("sign_method", "md5")
-	args.Add("partner_id", "Undesoft")
+	p["timestamp"] = strconv.FormatInt(loc.Unix(), 10)
+	p["format"] = "json"
+	p["app_key"] = AppKey
+	p["v"] = "2.0"
+	p["sign_method"] = "md5"
+	p["partner_id"] = "Keng"
+	// 设置签名
+	p["sign"] = getSign(p)
+}
+
+// 获取请求数据
+func (p Parameter) getRequestData() string {
+	// 公共参数
+	args := url.Values{}
 	// 请求参数
-	for key, val := range *p {
+	for key, val := range p {
 		args.Set(key, val)
 	}
-	// 设置签名
-	args.Add("sign", getSign(args))
 	return args.Encode()
 }
 
 // 获取签名
-func getSign(args url.Values) string {
+func getSign(params Parameter) string {
 	// 获取Key
 	keys := []string{}
-	for k := range args {
+	for k := range params {
 		keys = append(keys, k)
 	}
 	// 排序asc
@@ -194,7 +206,7 @@ func getSign(args url.Values) string {
 	// 把所有参数名和参数值串在一起
 	query := AppSecret
 	for _, k := range keys {
-		query += k + args.Get(k)
+		query += k + params[k]
 	}
 	query += AppSecret
 	// 使用MD5加密

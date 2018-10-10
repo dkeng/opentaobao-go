@@ -54,9 +54,16 @@ func newCacheKey(params Parameter) string {
 	delete(cpParams, "timestamp")
 	delete(cpParams, "sign")
 
+	keys := []string{}
+	for k := range cpParams {
+		keys = append(keys, k)
+	}
+	// 排序asc
+	sort.Strings(keys)
+	// 把所有参数名和参数值串在一起
 	cacheKeyBuf := new(bytes.Buffer)
-	for k, v := range cpParams {
-		cacheKeyBuf.WriteString(k + "=" + v)
+	for _, k := range keys {
+		cacheKeyBuf.WriteString(k + "=" + cpParams[k])
 	}
 	fmt.Println("debug cacheKey:", cacheKeyBuf.String())
 	h := md5.New()

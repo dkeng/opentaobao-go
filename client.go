@@ -65,7 +65,6 @@ func newCacheKey(params Parameter) string {
 	for _, k := range keys {
 		cacheKeyBuf.WriteString(k + "=" + cpParams[k])
 	}
-	fmt.Println("debug cacheKey:", cacheKeyBuf.String())
 	h := md5.New()
 	io.Copy(h, cacheKeyBuf)
 	return hex.EncodeToString(h.Sum(nil))

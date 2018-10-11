@@ -45,6 +45,17 @@ func TestExecute(t *testing.T) {
 	}
 }
 
+func TestExecuteErrMsg(t *testing.T) {
+	_, err := Execute("taobao.tbk.dg.material.optional", Parameter{
+		"q":   "女装",
+		"cat": "16,18",
+	})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestExecuteCache(t *testing.T) {
 	res, err := ExecuteCache("taobao.tbk.item.get", Parameter{
 		"fields": "num_iid,title,pict_url,small_images,reserve_price,zk_final_price,user_type,provcity,item_url,seller_id,volume,nick",

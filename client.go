@@ -121,8 +121,11 @@ func bytesToResult(bytes []byte) (res *simplejson.Json, err error) {
 	}
 
 	if responseError, ok := res.CheckGet("error_response"); ok {
-		errorBytes, _ := responseError.Encode()
-		err = errors.New("执行错误:" + string(errorBytes))
+		if subMsg, subOk := responseError.CheckGet("sub_msg"); subOk {
+			err = errors.New(subMsg.MustString())
+		} else {
+			err = errors.New(responseError.Get("msg").MustString())
+		}
 		res = nil
 	}
 	return

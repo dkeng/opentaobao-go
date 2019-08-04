@@ -1,6 +1,8 @@
 # taobaogo
 淘宝Api、淘宝开放平台Api请求基础SDK
 
+# 项目迁移至 `https://github.com/nilorg/go-opentaobao`
+
 # 淘宝API sign算法
 
 [sign算法](http://open.taobao.com/doc.htm?docId=101617&docType=1)
